@@ -1,7 +1,7 @@
 {
   "name": "racy-deploy",
   "version": "1.0.0",
-  "description": "A blazing fast zero-configuration deployment toolbelt using Docker and Kubernetes",
+  "description": "A blazing fast zero-configuration deployment toolbelt",
   "source": true,
   "engines": {
     "node": ">=8.10.0"
