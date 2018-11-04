@@ -46,8 +46,8 @@ async function main() {
   const ISSTATIC = await pathExists(join(WORKINGDIR, 'index.html'));
   const PROJECTNAME = parse(WORKINGDIR).base;
   const PROJECTCONFIG = tryRequire(`${WORKINGDIR}/.racy-deploy.json`);
-  const PROJECTVERSION = 'latest';
   const IMAGETAGPREFIX = PROJECTCONFIG.tagPrefix || '';
+  const PROJECTVERSION = PROJECTCONFIG.version || 'latest';
   const USERNAME = PROJECTCONFIG.username;
   const PASSWORD = PROJECTCONFIG.password;
   const DOMAIN = PROJECTCONFIG.domain;
