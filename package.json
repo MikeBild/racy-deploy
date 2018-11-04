@@ -1,6 +1,6 @@
 {
   "name": "racy-deploy",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "description": "A blazing fast zero-configuration deployment toolbelt",
   "source": true,
   "engines": {
