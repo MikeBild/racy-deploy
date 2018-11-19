@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 const argv = require('yargs')
   .usage('Usage: $0 <command>')
-  .command('init [dir]', 'Initialze an App')
-  .command('publish [dir]', 'Publish an App')
-  .command('deploy [dir]', 'Deploy an App')
-  .command('remove [dir]', 'Remove deployment')
+  .command('init [dir]', 'Initialze')
+  .command('inspect [dir]', 'Inspect')
+  .command('publish [dir]', 'Publish')
+  .command('deploy [dir]', 'Deploy')
+  .command('remove [dir]', 'Remove')
   .help('h')
   .alias('h', 'help')
   .locale('en')
@@ -20,6 +21,7 @@ const pkg = require('./package.json');
 
 const { build, push } = require('./lib/docker');
 const { deploy, remove } = require('./lib/k8s');
+const { loadEnv, writeEnv } = require('./lib/env');
 
 const rlp = createInterface({
   input: process.stdin,
@@ -40,71 +42,79 @@ main()
 async function main() {
   updateNotifier({ pkg }).notify();
 
+  const VERBOSE = process.env.VERBOSE === 'true';
+
   const WORKINGDIR = Boolean(argv.dir) ? resolve(argv.dir) : process.cwd();
   const ISNODEJS = await pathExists(join(WORKINGDIR, 'package.json'));
   const ISDOCKER = await pathExists(join(WORKINGDIR, 'Dockerfile'));
   const ISSTATIC = await pathExists(join(WORKINGDIR, 'index.html'));
-  const PROJECTNAME = parse(WORKINGDIR).base;
-  const PROJECTCONFIG = tryRequire(`${WORKINGDIR}/.racy-deploy.json`);
-  const IMAGETAGPREFIX = PROJECTCONFIG.tagPrefix || '';
-  const PROJECTVERSION = PROJECTCONFIG.version || 'latest';
-  const USERNAME = PROJECTCONFIG.username;
-  const PASSWORD = PROJECTCONFIG.password;
-  const DOMAIN = PROJECTCONFIG.domain;
-  const VERBOSE = Boolean(
-    process.env.VERBOSE || PROJECTCONFIG.verbose || false,
-  );
+
+  const PROJECTCONFIG = loadEnv(WORKINGDIR);
+  const PROJECTNAME = PROJECTCONFIG.DEPLOY_NAME || parse(WORKINGDIR).base;
+  const PROJECTVERSION = PROJECTCONFIG.DEPLOY_VERSION || 'latest';
+  const DOMAIN = PROJECTCONFIG.DEPLOY_DOMAIN;
+  const IMAGETAGPREFIX = PROJECTCONFIG.DEPLOY_TAGPREFIX || '';
+  const USERNAME = PROJECTCONFIG.DEPLOY_USERNAME;
+  const PASSWORD = PROJECTCONFIG.DEPLOY_PASSWORD;
+
   const PROJECTTYPE = ISSTATIC
     ? 'STATIC'
     : ISNODEJS
-      ? 'NODEJS'
-      : ISDOCKER
-        ? 'DOCKER'
-        : 'NONE';
+    ? 'NODEJS'
+    : ISDOCKER
+    ? 'DOCKER'
+    : PROJECTCONFIG.DEPLOY_TYPE
+    ? PROJECTCONFIG.DEPLOY_TYPE
+    : 'NONE';
 
   if (VERBOSE)
     console.log({
+      argv,
       WORKINGDIR,
       PROJECTTYPE,
       PROJECTNAME,
       PROJECTVERSION,
       IMAGETAGPREFIX,
-      PROJECTCONFIG,
-      VERBOSE,
+      DOMAIN,
+      USERNAME,
+      PASSWORD,
     });
 
-  if (VERBOSE) console.log(argv);
-
   switch (argv._[0]) {
+    case 'inspect':
+      console.log(`Working Directory: ${WORKINGDIR}`);
+      console.log(`Type             : ${PROJECTTYPE || '-'}`);
+      console.log(`Name             : ${PROJECTNAME || '-'}`);
+      console.log(`Version          : ${PROJECTVERSION || '-'}`);
+      console.log(`Domain           : ${DOMAIN || '-'}`);
+      console.log(`Prefix           : ${IMAGETAGPREFIX || '-'}`);
+      console.log(`Username         : ${USERNAME || '-'}`);
+      console.log(`Password         : ${PASSWORD || '-'}`);
+      break;
     case 'init':
       const config = {
-        name: PROJECTNAME,
-        version: PROJECTVERSION,
-        type: PROJECTTYPE,
+        DEPLOY_NAME: PROJECTNAME,
+        DEPLOY_VERSION: PROJECTVERSION,
+        DEPLOY_TYPE: PROJECTTYPE,
       };
-      config.verbose = Boolean(
-        await rlp.questionAsync('Verbose deployment outputs (true|false)? '),
-      );
       const isPrivateRepo = await rlp.questionAsync(
-        'Deploy to private Docker registry (yes|no)? ',
+        'Deploy to private Docker registry (yes|no)? '
       );
       if (isPrivateRepo === 'yes') {
-        config.tagPrefix = await rlp.questionAsync(
-          'Enter a image tag prefix? ',
+        config.DEPLOY_TAGPREFIX = await rlp.questionAsync(
+          'Enter a image tag prefix? '
         );
-        config.username = await rlp.questionAsync('Enter username? ');
-        config.password = await rlp.questionAsync('Enter password? ');
+        config.DEPLOY_USERNAME = await rlp.questionAsync('Enter username? ');
+        config.DEPLOY_PASSWORD = await rlp.questionAsync('Enter password? ');
       }
-      config.domain = await rlp.questionAsync(
-        'Enter domain name (services.example.com)? ',
+      config.DEPLOY_DOMAIN = await rlp.questionAsync(
+        'Enter domain name (services.example.com)? '
       );
 
       try {
-        await writeJson(join(WORKINGDIR, '.racy-deploy.json'), config, {
-          spaces: 2,
-          flag: 'wx+',
-        });
+        await writeEnv(join(WORKINGDIR, '.env.deploy'), config);
       } catch (e) {
+        console.log(e);
         console.error('Racy deployment config already exists');
         process.exit(1);
       }
@@ -123,7 +133,7 @@ async function main() {
 
       if (!IMAGETAGPREFIX)
         return console.log(
-          `No tag prefix set. Skip publish image to ${imageTag}`,
+          `No tag prefix set. Skip publish image to ${imageTag}`
         );
 
       console.log(`Publishing ...`);

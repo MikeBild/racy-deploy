@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
-    "start": "PORT=80 node server.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.16.4"
